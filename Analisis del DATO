@@ -59,7 +59,7 @@ plt.show()
 # Prueba de Dickey-Fuller sobre la serie transformada
 # =======================
 adf_test_log_diff = adfuller(df_series_log_diff)
-print("📌 Prueba de Dickey-Fuller tras transformación logarítmica y diferencia estacional:")
+print(" Prueba de Dickey-Fuller tras transformación logarítmica y diferencia estacional:")
 print(f"ADF Statistic: {adf_test_log_diff[0]}")
 print(f"p-value: {adf_test_log_diff[1]}")
 
@@ -393,6 +393,7 @@ print(tabla_predicciones)
 
 # Guardar en un archivo CSV si se desea
 tabla_predicciones.to_csv("predicciones_arima_215.csv", index=False)
+
 ##ARIMA(2,0,4)
 import numpy as np
 import pandas as pd
@@ -1050,7 +1051,7 @@ for order in orders:
 if best_model is None:
     raise ValueError("No se encontró ningún modelo ARIMAX válido.")
 
-print(f"✅ Mejor modelo ARIMAX{best_order} con AIC = {best_aic:.2f}")
+print(f"Mejor modelo ARIMAX{best_order} con AIC = {best_aic:.2f}")
 
 # Paso 7: Preparar test con mismas transformaciones
 y_all = pd.concat([y_train_full, y_test])
