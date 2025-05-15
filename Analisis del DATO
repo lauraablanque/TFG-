@@ -1,0 +1,1252 @@
+##ANALISIS DEL DATO 
+!pip install pmdarima
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"  # Nombre del archivo
+df = pd.read_excel(file_name, sheet_name="Hoja1")  # Cargar datos
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Graficar la serie original
+# =======================
+plt.figure(figsize=(10,5))
+plt.plot(df_series, label="Serie Original", color='blue')
+plt.title("Serie de Ocupación Hotelera (Original)")
+plt.legend()
+plt.show()
+
+# =======================
+# Aplicar transformación logarítmica
+# =======================
+df_series_log = np.log(df_series)
+
+plt.figure(figsize=(10,5))
+plt.plot(df_series_log, label="Serie Logarítmica", color='green')
+plt.title("Serie de Ocupación Hotelera (Transformación Logarítmica)")
+plt.legend()
+plt.show()
+
+# =======================
+# Aplicar diferencia estacional (12 meses)
+# =======================
+df_series_log_diff = df_series_log.diff(12).dropna()
+
+plt.figure(figsize=(10,5))
+plt.plot(df_series_log_diff, label="Serie Diferenciada", color='red')
+plt.title("Serie de Ocupación Hotelera (Diferencia Estacional)")
+plt.legend()
+plt.show()
+
+# =======================
+# Prueba de Dickey-Fuller sobre la serie transformada
+# =======================
+adf_test_log_diff = adfuller(df_series_log_diff)
+print("📌 Prueba de Dickey-Fuller tras transformación logarítmica y diferencia estacional:")
+print(f"ADF Statistic: {adf_test_log_diff[0]}")
+print(f"p-value: {adf_test_log_diff[1]}")
+
+if adf_test_log_diff[1] < 0.05:
+    print("La serie transformada es estacionaria.")
+else:
+    print("La serie sigue sin ser estacionaria.")
+
+# =======================
+# Graficar la FAC y la FACP
+# =======================
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# FAC (Función de Autocorrelación)
+sm.graphics.tsa.plot_acf(df_series_log_diff, lags=30, ax=axes[0])
+axes[0].set_title("FAC (Autocorrelación) de la Serie Transformada")
+
+# FACP (Función de Autocorrelación Parcial)
+sm.graphics.tsa.plot_pacf(df_series_log_diff, lags=30, ax=axes[1])
+axes[1].set_title("FACP (Autocorrelación Parcial) de la Serie Transformada")
+
+plt.tight_layout()
+plt.show()
+
+# =======================
+# Aplicar Auto-ARIMA sin componente estacional
+# =======================
+modelo_auto = auto_arima(df_series_log_diff, seasonal=False, trace=True, suppress_warnings=True)
+
+# Mostrar el resumen del mejor modelo encontrado
+print(modelo_auto.summary())
+###arima (2,0,5) con train y test
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(2,1,5)
+# =======================
+modelo_arima_205 = sm.tsa.ARIMA(df_series_log_diff, order=(2, 0, 5)).fit()
+print(modelo_arima_205.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_205.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(2,0,5)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_205.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_205.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original.index, predicciones_original, label="Predicción (Test)", linestyle="dashed", color="red")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(2,0,5)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()
+###arima (2,1,5) con train y test
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(2,1,5)
+# =======================
+modelo_arima_215 = sm.tsa.ARIMA(df_series_log_diff, order=(2, 1, 5)).fit()
+print(modelo_arima_215.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_215.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(2,1,5)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_215.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_205.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(2,1,5)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()
+
+# =======================
+# Crear y mostrar la tabla con valores reales y predicciones
+# =======================
+tabla_predicciones = pd.DataFrame({
+    "Fecha": test.index,
+    "Valor Real": test.values,
+    "Predicción": predicciones_original.values
+})
+
+# Mostrar la tabla
+print(tabla_predicciones)
+
+# Guardar en un archivo CSV si se desea
+tabla_predicciones.to_csv("predicciones_arima_215.csv", index=False)
+##ARIMA(2,0,4)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(2,0,4)
+# =======================
+modelo_arima_204 = sm.tsa.ARIMA(df_series_log_diff, order=(2, 1, 4)).fit()
+print(modelo_arima_204.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_204.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(2,0,4)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_204.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_204.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original.index, predicciones_original, label="Predicción (Test)", linestyle="dashed", color="red")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(2,0,4)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()
+## ARIMA(1,1,1)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(1,1,1)
+# =======================
+modelo_arima_111 = sm.tsa.ARIMA(df_series_log_diff, order=(1, 1, 1)).fit()
+print(modelo_arima_111.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_111.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(1,1,1)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_205.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_111.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original.index, predicciones_original, label="Predicción (Test)", linestyle="dashed", color="red")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(1,1,1)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()
+##ARIMA(2,0,3)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(2,0,3)
+# =======================
+modelo_arima_203 = sm.tsa.ARIMA(df_series_log_diff, order=(2, 0, 3)).fit()
+print(modelo_arima_203.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_203.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(2,0,3)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_203.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_205.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original.index, predicciones_original, label="Predicción (Test)", linestyle="dashed", color="red")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(2,0,3)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()##ARIMA(1,0,1)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import seaborn as sns
+import scipy.stats as stats
+from scipy.stats import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+# =======================
+# Cargar el archivo Excel
+# =======================
+file_name = "OCUPACION_HOTELES_SIN_OUTLIERS.xlsx"
+df = pd.read_excel(file_name, sheet_name="Hoja1")
+
+# =======================
+# Convertir fechas y establecer índice
+# =======================
+df["FECHA"] = pd.to_datetime(df["FECHA"])
+df.set_index("FECHA", inplace=True)
+
+# =======================
+# Extraer la serie de ocupación hotelera
+# =======================
+df_series = df["OCUPACION_HOTELES"]
+
+# =======================
+# Dividir en conjunto de entrenamiento y test
+# =======================
+n_test = 10 # Ultimo año
+train, test = df_series[:-n_test], df_series[-n_test:]
+
+# =======================
+# Aplicar transformación logarítmica y graficar
+# =======================
+train_log = np.log(train)
+
+df_series_log_diff = train_log.diff(12).dropna()
+
+# =======================
+# Ajustar el modelo ARIMA(101)
+# =======================
+modelo_arima_101 = sm.tsa.ARIMA(df_series_log_diff, order=(1, 0, 1)).fit()
+print(modelo_arima_101.summary())
+
+# =======================
+# Análisis de los residuos
+# =======================
+residuos = modelo_arima_101.resid
+
+plt.figure(figsize=(10, 5))
+sns.histplot(residuos, bins=20, kde=True, color="blue")
+plt.title("Histograma de los Residuos del Modelo ARIMA(1,0,1)")
+plt.xlabel("Valor de los Residuos")
+plt.ylabel("Frecuencia")
+plt.grid(True)
+plt.show()
+
+
+# Prueba de Jarque-Bera
+# Esta prueba evalúa si los residuos siguen una distribución normal.
+jb_stat, jb_pvalue = jarque_bera(residuos)
+print(f"Jarque-Bera Test: Estadística={jb_stat}, p-valor={jb_pvalue}")
+if jb_pvalue > 0.05:
+    print("Los residuos siguen una distribución normal.")
+else:
+    print("Los residuos NO siguen una distribución normal.")
+
+# Prueba de Box-Pierce
+# Esta prueba verifica si los residuos están correlacionados en diferentes rezagos.
+bp_test = acorr_ljungbox(residuos, lags=[10], return_df=True)
+print("Box-Pierce Test:")
+print(bp_test)
+if bp_test['lb_pvalue'].values[0] > 0.05:
+    print("No hay evidencia de autocorrelación en los residuos.")
+else:
+    print("Hay evidencia de autocorrelación en los residuos.")
+
+# Media de los residuos
+media_residuos = np.mean(residuos)
+print(f"Media de los residuos: {media_residuos}")
+
+# =======================
+# Predicción en el conjunto de test
+# =======================
+predicciones_log_diff = modelo_arima_101.forecast(steps=n_test)
+
+# Restaurar la diferencia estacional
+predicciones_log = []
+valores_pasados = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff)):
+    prediccion_actual = valores_pasados[i % 12] + predicciones_log_diff[i]
+    predicciones_log.append(prediccion_actual)
+    valores_pasados.append(prediccion_actual)
+
+predicciones_log = pd.Series(predicciones_log, index=test.index)
+predicciones_original = np.exp(predicciones_log)
+
+# =======================
+# Evaluación del modelo en test
+# =======================
+rmse = np.sqrt(mean_squared_error(test, predicciones_original))
+mae = mean_absolute_error(test, predicciones_original)
+print(f"RMSE en test: {rmse}")
+print(f"MAE en test: {mae}")
+
+# =======================
+# Predicción a 3 años futuros (36 meses)
+# =======================
+horizonte_prediccion = 36
+predicciones_log_diff_futuro = modelo_arima_101.forecast(steps=horizonte_prediccion)
+
+# Restaurar la diferencia estacional para la predicción futura
+predicciones_log_futuro = []
+valores_pasados_futuro = list(train_log.iloc[-12:].values)
+for i in range(len(predicciones_log_diff_futuro)):
+    prediccion_actual = valores_pasados_futuro[i % 12] + predicciones_log_diff_futuro[i]
+    predicciones_log_futuro.append(prediccion_actual)
+    valores_pasados_futuro.append(prediccion_actual)
+
+predicciones_log_futuro = pd.Series(predicciones_log_futuro,
+    index=pd.date_range(start=df_series.index[-1] + pd.DateOffset(months=1),
+                        periods=horizonte_prediccion, freq='M'))
+
+# Aplicar la exponencial para volver a la escala original
+predicciones_original_futuro = np.exp(predicciones_log_futuro)
+
+# =======================
+# Graficar los resultados de la predicción
+# =======================
+plt.figure(figsize=(12, 6))
+plt.plot(df_series, label="Serie Original", color="blue")
+plt.plot(predicciones_original.index, predicciones_original, label="Predicción (Test)", linestyle="dashed", color="red")
+plt.plot(predicciones_original_futuro.index, predicciones_original_futuro, label="Predicción (3 años)", linestyle="dashed", color="green")
+plt.title("Predicción con ARIMA(1,0,1)")
+plt.xlabel("Fecha")
+plt.ylabel("Ocupación Hotelera")
+plt.legend()
+plt.grid()
+plt.show()# Paso 1: Instalar librerías necesarias
+!pip install statsmodels openpyxl
+
+# Paso 2: Importar librerías
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.stats.stattools import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import itertools
+from google.colab import files
+
+# Paso 3: Subir archivo
+uploaded = files.upload()
+
+# Paso 4: Cargar datos
+df = pd.read_excel(list(uploaded.keys())[0])
+df['FECHA'] = pd.to_datetime(df['FECHA'])
+df.set_index('FECHA', inplace=True)
+
+# Reparar decimales si es necesario
+for col in df.columns:
+    if df[col].dtype == object:
+        df[col] = df[col].str.replace(',', '.').astype(float)
+
+# Detectar variable objetivo
+for col in df.columns:
+    if 'ocupacion' in col.lower():
+        target_col = col
+        break
+else:
+    raise ValueError("No se encontró una columna con 'ocupacion'")
+
+# Paso 5: Separar en train/test
+df_train = df.iloc[:-10]
+df_test = df.iloc[-10:]
+y_train_full = df_train[target_col]
+X_train_full = df_train.drop(columns=[target_col])
+y_test = df_test[target_col]
+X_test = df_test.drop(columns=[target_col])
+
+# Paso 6: Buscar mejor ARIMAX
+p = d = q = range(0, 6)
+d_vals = range(0, 1)
+orders = list(itertools.product(p, d_vals, q))
+best_aic = np.inf
+best_order = None
+best_model = None
+best_y_train = None
+best_X_train = None
+
+for order in orders:
+    try:
+        p_, d_, q_ = order
+        y = y_train_full.copy()
+        X = X_train_full.copy()
+
+        for _ in range(d_):
+            y = y.diff()
+            X = X.diff()
+
+        y = y.dropna()
+        X = X.loc[y.index]
+
+        model = ARIMA(y, exog=X, order=(p_, 0, q_))
+        result = model.fit()
+        if result.aic < best_aic:
+            best_aic = result.aic
+            best_order = (p_, d_, q_)
+            best_model = result
+            best_y_train = y
+            best_X_train = X
+    except:
+        continue
+
+if best_model is None:
+    raise ValueError("No se encontró ningún modelo ARIMAX válido.")
+
+print(f"✅ Mejor modelo ARIMAX{best_order} con AIC = {best_aic:.2f}")
+
+# Paso 7: Preparar test con mismas transformaciones
+y_all = pd.concat([y_train_full, y_test])
+X_all = pd.concat([X_train_full, X_test])
+for _ in range(best_order[1]):
+    y_all = y_all.diff()
+    X_all = X_all.diff()
+
+y_all = y_all.dropna()
+X_all = X_all.loc[y_all.index]
+
+# Redefinir train/test
+y_train_final = y_all.iloc[:-10]
+X_train_final = X_all.iloc[:-10]
+y_test_final = y_all.iloc[-10:]
+X_test_final = X_all.iloc[-10:]
+
+# Paso 8: Ajustar modelo y predecir
+model_final = ARIMA(y_train_final, exog=X_train_final, order=(best_order[0], 0, best_order[2]))
+result_final = model_final.fit()
+forecast = result_final.predict(start=y_test_final.index[0], end=y_test_final.index[-1], exog=X_test_final)
+
+# Paso 9: Evaluar residuos
+residuals = result_final.resid
+jb_pval = jarque_bera(residuals)[1]
+lb_pval = acorr_ljungbox(residuals, lags=[10], return_df=True).iloc[0]['lb_pvalue']# Instalar librerías necesarias
+!pip install statsmodels openpyxl
+
+# Importar librerías
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.stats.stattools import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from google.colab import files
+
+# Subir archivo
+uploaded = files.upload()
+
+# Leer y limpiar
+df = pd.read_excel(list(uploaded.keys())[0])
+df['FECHA'] = pd.to_datetime(df['FECHA'])
+df.set_index('FECHA', inplace=True)
+
+# Arreglar coma decimal si hace falta
+for col in df.columns:
+    if df[col].dtype == object:
+        df[col] = df[col].str.replace(',', '.').astype(float)
+
+# Detectar variable objetivo
+for col in df.columns:
+    if 'ocupacion' in col.lower():
+        target_col = col
+        break
+else:
+    raise ValueError("No se encontró una columna con 'ocupacion'")
+
+# Separar en train/test
+df_train = df.iloc[:-10]
+df_test = df.iloc[-10:]
+y_train = df_train[target_col]
+X_train = df_train.drop(columns=[target_col])
+y_test = df_test[target_col]
+X_test = df_test.drop(columns=[target_col])
+
+# ARIMAX(0, 0, 5) → sin diferencias
+model = ARIMA(y_train, exog=X_train, order=(5, 0, 0))
+result = model.fit()
+forecast = result.predict(start=y_test.index[0], end=y_test.index[-1], exog=X_test)
+
+# Evaluar residuos
+residuals = result.resid
+jb_pval = jarque_bera(residuals)[1]
+lb_pval = acorr_ljungbox(residuals, lags=[10], return_df=True).iloc[0]['lb_pvalue']
+
+# Calcular métricas
+rmse = mean_squared_error(y_test, forecast) ** 0.5
+mae = mean_absolute_error(y_test, forecast)
+
+# Mostrar resultados
+print("\n--- Summary del modelo ARIMAX(5, 0, 0) ---")
+print(result.summary())
+
+print("\n--- Evaluación de residuos (train) ---")
+print(f"Jarque-Bera p-valor: {jb_pval:.4f}")
+print(f"Ljung-Box p-valor (lag 10): {lb_pval:.4f}")
+
+print("\n--- Métricas de predicción sobre TEST ---")
+print(f"RMSE: {rmse:.2f}")
+print(f"MAE: {mae:.2f}")
+
+# Gráfico
+plt.figure(figsize=(14, 6))
+plt.plot(y_train.index, y_train, label='Train', color='blue')
+plt.plot(y_test.index, y_test, label='Test Real', color='green')
+plt.plot(y_test.index, forecast, label='Predicción', color='red', linestyle='--')
+plt.title('Predicción ARIMAX(5, 0, 0) sobre TEST')
+plt.xlabel('Fecha')
+plt.ylabel('Ocupación Hotelera')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Instalar librerías necesarias
+!pip install statsmodels openpyxl
+
+# Importar librerías
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.stats.stattools import jarque_bera
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from google.colab import files
+
+# Subir archivo
+uploaded = files.upload()
+
+# Leer y limpiar
+df = pd.read_excel(list(uploaded.keys())[0])
+df['FECHA'] = pd.to_datetime(df['FECHA'])
+df.set_index('FECHA', inplace=True)
+
+# Arreglar coma decimal si hace falta
+for col in df.columns:
+    if df[col].dtype == object:
+        df[col] = df[col].str.replace(',', '.').astype(float)
+
+# Detectar variable objetivo
+for col in df.columns:
+    if 'ocupacion' in col.lower():
+        target_col = col
+        break
+else:
+    raise ValueError("No se encontró una columna con 'ocupacion'")
+
+# Separar en train/test
+df_train = df.iloc[:-10]
+df_test = df.iloc[-10:]
+y_train = df_train[target_col]
+X_train = df_train.drop(columns=[target_col])
+y_test = df_test[target_col]
+X_test = df_test.drop(columns=[target_col])
+
+# ARIMAX(0, 0, 5) → sin diferencias
+model = ARIMA(y_train, exog=X_train, order=(5, 0, 0))
+result = model.fit()
+forecast = result.predict(start=y_test.index[0], end=y_test.index[-1], exog=X_test)
+
+# Evaluar residuos
+residuals = result.resid
+jb_pval = jarque_bera(residuals)[1]
+lb_pval = acorr_ljungbox(residuals, lags=[10], return_df=True).iloc[0]['lb_pvalue']
+
+# Calcular métricas
+rmse = mean_squared_error(y_test, forecast) ** 0.5
+mae = mean_absolute_error(y_test, forecast)
+
+# Mostrar resultados
+print("\n--- Summary del modelo ARIMAX(5, 0, 0) ---")
+print(result.summary())
+
+print("\n--- Evaluación de residuos (train) ---")
+print(f"Jarque-Bera p-valor: {jb_pval:.4f}")
+print(f"Ljung-Box p-valor (lag 10): {lb_pval:.4f}")
+
+print("\n--- Métricas de predicción sobre TEST ---")
+print(f"RMSE: {rmse:.2f}")
+print(f"MAE: {mae:.2f}")
+
+# Gráfico
+plt.figure(figsize=(14, 6))
+plt.plot(y_train.index, y_train, label='Train', color='blue')
+plt.plot(y_test.index, y_test, label='Test Real', color='green')
+plt.plot(y_test.index, forecast, label='Predicción', color='red', linestyle='--')
+plt.title('Predicción ARIMAX(5, 0, 0) sobre TEST')
+plt.xlabel('Fecha')
+plt.ylabel('Ocupación Hotelera')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Crear DataFrame comparativo entre real y predicción
+df_resultados = pd.DataFrame({
+    'Fecha': y_test.index,
+    'Ocupación Real': y_test.values,
+    'Ocupación Predicha': forecast.values
+})
+df_resultados.set_index('Fecha', inplace=True)
+
+# Mostrar la tabla
+print("\n--- Comparación entre valores reales y predichos ---")
+print(df_resultados)
+
+# Opcional: exportar a Excel si lo necesitas
+# df_resultados.to_excel("predicciones_arimax.xlsx")
